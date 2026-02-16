@@ -23,7 +23,11 @@ import {
   ThumbsUp,
   ThumbsDown,
   History,
-  ClipboardList
+  ClipboardList,
+  Search,
+  CreditCard,
+  Info,
+  User as UserIcon
 } from 'lucide-react';
 import { initializeApp } from 'firebase/app';
 import { 
@@ -57,7 +61,7 @@ const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
 
-// --- 2. DATOS DE NEGOCIO ACTUALIZADOS ---
+// --- 2. DATOS DE NEGOCIO ---
 const KITS = [
   { id: 'esencial', name: 'Kit Esencial', price: 13990, desc: 'Identificación básica para útiles y ropa.' },
   { id: 'plus', name: 'Kit Plus', price: 23990, desc: 'Etiquetas + Termoformados + Llavero de regalo.' },
@@ -90,11 +94,14 @@ export default function App() {
   const [step, setStep] = useState(0);
   const [loading, setLoading] = useState(false);
   const [showAdmin, setShowAdmin] = useState(false);
+  const [adminUser, setAdminUser] = useState('');
   const [adminPass, setAdminPass] = useState('');
   const [isAdminAuth, setIsAdminAuth] = useState(false);
   const [orders, setOrders] = useState([]);
   const [statusMessage, setStatusMessage] = useState(null);
-  const [adminTab, setAdminTab] = useState('activos'); // 'activos' o 'historial'
+  const [adminTab, setAdminTab] = useState('activos'); 
+  const [historyFilter, setHistoryFilter] = useState('todos'); 
+  const [searchTerm, setSearchTerm] = useState('');
   
   const [formData, setFormData] = useState({
     parentName: '', 
@@ -103,6 +110,7 @@ export default function App() {
     theme: '', 
     selectedKit: '', 
     selectedItems: [], 
+    paymentMethod: '', 
     deliveryType: '', 
     commune: '', 
     street: '',
@@ -123,14 +131,14 @@ export default function App() {
     return () => unsubscribe();
   }, []);
 
-  // Admin: Escuchar pedidos en tiempo real
+  // Admin: Escuchar pedidos
   useEffect(() => {
     if (!user || !isAdminAuth) return;
     const q = query(collection(db, 'orders'), orderBy('createdAt', 'desc'));
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const list = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       setOrders(list);
-    }, (error) => console.error("Error en base de datos:", error));
+    }, (error) => console.error("Error base de datos:", error));
     return () => unsubscribe();
   }, [user, isAdminAuth]);
 
@@ -150,24 +158,32 @@ export default function App() {
     const totalRevenue = orders
       .filter(o => o.status !== 'rechazado')
       .reduce((acc, curr) => acc + (curr.total || 0), 0);
-      
-    const kitStats = KITS.map(kit => ({
-      name: kit.name,
-      revenue: orders
-        .filter(o => o.selectedKit === kit.id && o.status !== 'rechazado')
-        .reduce((acc, curr) => acc + (curr.total || 0), 0)
-    }));
-    return { kitStats, totalRevenue };
+    return { totalRevenue };
   }, [orders]);
 
   // Filtrado de pedidos para el Admin
   const filteredOrders = useMemo(() => {
+    let baseList = [];
     if (adminTab === 'activos') {
-      return orders.filter(o => o.status === 'pendiente' || o.status === 'aceptado');
+      baseList = orders.filter(o => o.status === 'pendiente' || o.status === 'aceptado');
     } else {
-      return orders.filter(o => o.status === 'listo' || o.status === 'rechazado');
+      baseList = orders.filter(o => o.status === 'listo' || o.status === 'rechazado');
+      if (historyFilter !== 'todos') {
+        baseList = baseList.filter(o => o.status === historyFilter);
+      }
     }
-  }, [orders, adminTab]);
+
+    if (searchTerm.trim() !== '') {
+      const lowSearch = searchTerm.toLowerCase();
+      baseList = baseList.filter(o => 
+        o.parentName?.toLowerCase().includes(lowSearch) ||
+        o.studentName?.toLowerCase().includes(lowSearch) ||
+        o.phone?.includes(searchTerm) ||
+        o.theme?.toLowerCase().includes(lowSearch)
+      );
+    }
+    return baseList;
+  }, [orders, adminTab, historyFilter, searchTerm]);
 
   // Navegación
   const next = () => { window.scrollTo(0, 0); setStep(s => s + 1); };
@@ -198,21 +214,17 @@ export default function App() {
       await addDoc(collection(db, 'orders'), orderData);
       
       const kitName = KITS.find(k => k.id === formData.selectedKit)?.name || 'Ninguno';
-      const itemsList = formData.selectedItems.length > 0 
-        ? formData.selectedItems.map(id => INDIVIDUAL_PRODUCTS.find(p => p.id === id).name).join(", ")
-        : "Ninguno";
-
       const addressFull = formData.deliveryType === 'envio' ? `${formData.street} ${formData.houseNumber}, ${formData.commune}` : 'Retiro en Local';
-      const msg = `Hola Lelune! 🌙 Nuevo pedido:\n👤 Cliente: ${formData.parentName}\n🎒 Alumno: ${formData.studentName}\n📦 Kit: ${kitName}\n➕ Adicionales: ${itemsList}\n📍 Entrega: ${addressFull}\n💰 Total: $${totalAmount.toLocaleString('es-CL')}`;
+      const msg = `Hola Lelune! 🌙 Nuevo pedido:\n👤 Cliente: ${formData.parentName}\n🎒 Alumno: ${formData.studentName}\n📦 Kit: ${kitName}\n💳 Pago elegido: ${formData.paymentMethod === 'mercado_pago' ? 'Mercado Pago (Link)' : 'Transferencia'}\n📍 Entrega: ${addressFull}\n💰 Total: $${totalAmount.toLocaleString('es-CL')}`;
       
-      // Enviar al número de Lelune: +56950732322
+      // WhatsApp Lelune (Notificación para el comercio)
       window.open(`https://wa.me/56950732322?text=${encodeURIComponent(msg)}`, '_blank');
       
-      setStatusMessage({ type: 'success', text: '¡Pedido enviado!' });
+      setStatusMessage({ type: 'success', text: '¡Solicitud enviada!' });
       setStep(0);
       setFormData({ 
         parentName: '', phone: '', studentName: '', theme: '', 
-        selectedKit: '', selectedItems: [], deliveryType: '', 
+        selectedKit: '', selectedItems: [], paymentMethod: '', deliveryType: '', 
         commune: '', street: '', houseNumber: '', receiverName: '', altPhone: '', deliveryDateId: '' 
       });
       setTimeout(() => setStatusMessage(null), 5000);
@@ -224,10 +236,10 @@ export default function App() {
   };
 
   const handleAdminLogin = () => {
-    if (adminPass === 'Lelune2026') { 
+    if (adminUser === 'leluneadminCS' && adminPass === 'Lelune2026') { 
       setIsAdminAuth(true); 
     } else { 
-      setStatusMessage({ type: 'error', text: 'Clave incorrecta.' }); 
+      setStatusMessage({ type: 'error', text: 'Credenciales incorrectas.' }); 
       setTimeout(() => setStatusMessage(null), 3000);
     }
   };
@@ -237,9 +249,20 @@ export default function App() {
       const orderRef = doc(db, 'orders', orderId);
       await updateDoc(orderRef, { status: newStatus });
       
+      const order = orders.find(o => o.id === orderId);
+
       if (newStatus === 'rechazado') {
-        const order = orders.find(o => o.id === orderId);
-        const msg = `Hola ${order.parentName}! 🌙 Te escribimos de Lelune. Lamentamos informarte que no hemos podido aceptar tu pedido en este momento de manera cordial. Si tienes dudas, por favor contáctanos por aquí. ¡Muchas gracias!`;
+        const msg = `Hola ${order.parentName}! 🌙 Te escribimos de Lelune. Lamentamos informarte que no hemos podido aceptar tu solicitud en este momento por falta de disponibilidad. Si tienes dudas, contáctanos. ¡Muchas gracias!`;
+        window.open(`https://wa.me/56${order.phone}?text=${encodeURIComponent(msg)}`, '_blank');
+      }
+
+      if (newStatus === 'aceptado') {
+        let msg = "";
+        if (order.paymentMethod === 'mercado_pago') {
+          msg = `¡Hola ${order.parentName}! ✨ Tu solicitud en Lelune ha sido APROBADA. 🎒\n\nPara comenzar con la magia, puedes realizar el pago del 50% ($${(order.total * 0.5).toLocaleString('es-CL')}) en el siguiente link:\n👉 https://link.mercadopago.cl/lelunecl\n\nUna vez realizado, envíanos el comprobante por aquí. ¡Gracias! 🌙`;
+        } else {
+          msg = `¡Hola ${order.parentName}! ✨ Tu solicitud en Lelune ha sido APROBADA. 🎒\n\nPara comenzar con la magia, necesitamos el pago del 50% ($${(order.total * 0.5).toLocaleString('es-CL')}) vía transferencia. Por favor confírmanos por aquí para enviarte los datos de cuenta. ¡Gracias! 🌙`;
+        }
         window.open(`https://wa.me/56${order.phone}?text=${encodeURIComponent(msg)}`, '_blank');
       }
     } catch (e) { console.error(e); }
@@ -269,20 +292,20 @@ export default function App() {
         {step > 0 && (
           <div className="px-6 sm:px-10 pt-8 text-left">
             <div className="bg-gray-100 h-2 w-full rounded-full overflow-hidden">
-              <div className="bg-purple-400 h-full transition-all duration-700" style={{ width: `${(step / 5) * 100}%` }}></div>
+              <div className="bg-purple-400 h-full transition-all duration-700" style={{ width: `${(step / 6) * 100}%` }}></div>
             </div>
             <div className="flex justify-between mt-4 items-center">
               <button onClick={back} className="text-gray-300 hover:text-purple-400 flex items-center gap-1 font-black text-[10px] sm:text-xs uppercase tracking-widest transition-colors">
                 <ChevronLeft size={16} /> Atrás
               </button>
-              <span className="text-[10px] sm:text-xs font-black text-purple-200 uppercase tracking-widest">Paso {step} de 5</span>
+              <span className="text-[10px] sm:text-xs font-black text-purple-200 uppercase tracking-widest">Paso {step} de 6</span>
             </div>
           </div>
         )}
 
-        {/* --- STEPS --- */}
+        {/* --- STEPS CLIENT --- */}
         {step === 0 && (
-          <div className="p-8 sm:p-12 text-center">
+          <div className="p-8 sm:p-12 text-center animate-in">
             <div className="mb-8 flex justify-center">
               <div className="text-center">
                 <div className="flex items-center justify-center gap-1 sm:gap-2">
@@ -300,7 +323,7 @@ export default function App() {
         )}
 
         {step === 1 && (
-          <div className="p-8 sm:p-10 space-y-8 text-left">
+          <div className="p-8 sm:p-10 space-y-8 text-left animate-in">
             <h2 className="text-2xl sm:text-3xl font-black text-gray-800 tracking-tight">¡Hola! ✨</h2>
             <div className="space-y-6">
               <div className="space-y-1">
@@ -320,7 +343,7 @@ export default function App() {
         )}
 
         {step === 2 && (
-          <div className="p-8 sm:p-10 space-y-8 text-left">
+          <div className="p-8 sm:p-10 space-y-8 text-left animate-in">
             <h2 className="text-2xl sm:text-3xl font-black text-gray-800 tracking-tight">Personalización 🎒</h2>
             <div className="space-y-6">
               <div className="space-y-1">
@@ -337,7 +360,7 @@ export default function App() {
         )}
 
         {step === 3 && (
-          <div className="p-6 sm:p-10 space-y-6 text-left">
+          <div className="p-6 sm:p-10 space-y-6 text-left animate-in">
             <h2 className="text-2xl sm:text-3xl font-black text-gray-800 tracking-tight">Tu Pedido 🎁</h2>
             <div className="space-y-6 max-h-[50vh] overflow-y-auto pr-2 custom-scrollbar">
               <section className="space-y-3">
@@ -381,7 +404,36 @@ export default function App() {
         )}
 
         {step === 4 && (
-          <div className="p-6 sm:p-10 space-y-6 text-left">
+          <div className="p-8 sm:p-10 space-y-8 text-left animate-in">
+            <h2 className="text-2xl sm:text-3xl font-black text-gray-800 tracking-tight">Medio de Pago 💳</h2>
+            <div className="grid grid-cols-1 gap-4">
+              <button 
+                onClick={() => setFormData({...formData, paymentMethod: 'transferencia'})}
+                className={`p-6 border-2 rounded-[2rem] flex items-center gap-4 transition-all ${formData.paymentMethod === 'transferencia' ? 'border-purple-500 bg-purple-50 shadow-md' : 'border-gray-50 bg-white hover:border-purple-100'}`}
+              >
+                <div className={`w-10 h-10 rounded-full flex items-center justify-center ${formData.paymentMethod === 'transferencia' ? 'bg-purple-500 text-white' : 'bg-gray-100 text-gray-400'}`}><ClipboardList size={20}/></div>
+                <div className="text-left">
+                  <p className="font-black text-gray-700">Transferencia</p>
+                  <p className="text-[10px] text-gray-400 font-bold">Coordina los datos tras la aprobación</p>
+                </div>
+              </button>
+              <button 
+                onClick={() => setFormData({...formData, paymentMethod: 'mercado_pago'})}
+                className={`p-6 border-2 rounded-[2rem] flex items-center gap-4 transition-all ${formData.paymentMethod === 'mercado_pago' ? 'border-blue-500 bg-blue-50 shadow-md' : 'border-gray-50 bg-white hover:border-blue-100'}`}
+              >
+                <div className={`w-10 h-10 rounded-full flex items-center justify-center ${formData.paymentMethod === 'mercado_pago' ? 'bg-blue-500 text-white' : 'bg-gray-100 text-gray-400'}`}><CreditCard size={20}/></div>
+                <div className="text-left">
+                  <p className="font-black text-gray-700">Mercado Pago</p>
+                  <p className="text-[10px] text-gray-400 font-bold">Link de pago tras la aprobación</p>
+                </div>
+              </button>
+            </div>
+            <button onClick={next} disabled={!formData.paymentMethod} className="w-full py-6 bg-purple-500 text-white rounded-3xl font-black text-lg shadow-xl shadow-purple-100 disabled:opacity-30 active:scale-[0.98] transition-all">Siguiente</button>
+          </div>
+        )}
+
+        {step === 5 && (
+          <div className="p-6 sm:p-10 space-y-6 text-left animate-in">
             <h2 className="text-2xl sm:text-3xl font-black text-gray-800 tracking-tight">Entrega 🚚</h2>
             <div className="flex flex-row gap-4">
               <button onClick={() => setFormData({...formData, deliveryType: 'retiro', commune: '', street: '', houseNumber: '', receiverName: formData.parentName})} className={`flex-1 p-6 border-2 rounded-[2rem] flex flex-col items-center gap-2 font-black transition-all ${formData.deliveryType === 'retiro' ? 'border-purple-500 bg-purple-50 text-purple-600 shadow-md' : 'border-gray-50 text-gray-300 hover:border-purple-100'}`}>
@@ -391,6 +443,15 @@ export default function App() {
                 <Truck size={24} /> <span className="text-sm">Envío</span>
               </button>
             </div>
+
+            {formData.deliveryType === 'retiro' && (
+              <div className="p-6 bg-blue-50 rounded-[2rem] border border-blue-100 flex gap-4 animate-in">
+                <Info size={24} className="text-blue-500 shrink-0 mt-1"/>
+                <p className="text-sm font-bold text-blue-700 leading-relaxed">
+                  Podrás retirar tu pedido en el punto de entrega que te indicaremos de manera personalizada a través de WhatsApp una vez que el pedido esté listo.
+                </p>
+              </div>
+            )}
             
             {formData.deliveryType === 'envio' && (
               <div className="space-y-4">
@@ -423,10 +484,17 @@ export default function App() {
           </div>
         )}
 
-        {step === 5 && (
-          <div className="p-8 sm:p-10 text-center text-left">
+        {step === 6 && (
+          <div className="p-8 sm:p-10 text-center text-left animate-in">
             <div className="w-16 h-16 sm:w-20 sm:h-20 bg-green-50 rounded-full flex items-center justify-center mx-auto mb-6 text-green-500 border-4 border-white shadow-lg"><CheckCircle size={32} /></div>
-            <h2 className="text-2xl sm:text-3xl font-black text-gray-800 mb-6 text-center">¡Casi listo! ✨</h2>
+            <h2 className="text-2xl sm:text-3xl font-black text-gray-800 mb-6 text-center">Resumen de tu solicitud ✨</h2>
+            
+            <div className="p-6 bg-orange-50 border border-orange-100 rounded-3xl mb-8 text-left">
+              <p className="text-xs font-bold text-orange-800 leading-relaxed italic">
+                * Importante: Para poder aceptar el pedido debe pagarse el 50% del total mediante el medio de pago señalado. Una vez enviada la solicitud, recibiremos la notificación, validaremos stock y te enviaremos el link o datos de pago por WhatsApp para confirmar.
+              </p>
+            </div>
+
             <div className="bg-gray-50 p-6 sm:p-8 rounded-[2rem] text-left space-y-4 border border-gray-100 mb-8 relative overflow-hidden shadow-sm">
               <div className="absolute top-0 right-0 p-6 opacity-[0.03] -rotate-12 pointer-events-none"><ShoppingBag size={120} /></div>
               <div className="relative z-10">
@@ -447,6 +515,10 @@ export default function App() {
                       <span>${INDIVIDUAL_PRODUCTS.find(p => p.id === id).price.toLocaleString()}</span>
                     </p>
                   ))}
+                  <p className="font-bold text-blue-600 text-xs mt-2 border-t border-blue-100 pt-2 flex justify-between">
+                    <span>💳 Pago elegido:</span>
+                    <span className="uppercase">{formData.paymentMethod === 'transferencia' ? 'Transferencia' : 'Mercado Pago'}</span>
+                  </p>
                 </div>
               </div>
               <div className="pt-4 border-t border-purple-100 flex justify-between items-end">
@@ -454,10 +526,10 @@ export default function App() {
                 <p className="font-black text-purple-500 text-3xl sm:text-4xl tracking-tighter">${totalAmount.toLocaleString()}</p>
               </div>
             </div>
-            <button onClick={saveOrder} disabled={loading} className="w-full py-6 bg-green-500 text-white rounded-[2rem] font-black text-xl shadow-lg shadow-green-100 active:scale-[0.98] transition-all flex items-center justify-center gap-4">
-              {loading ? <div className="animate-spin h-5 w-5 border-2 border-white/50 border-t-white rounded-full"></div> : <>Confirmar Pedido <ShoppingCart size={24} /></>}
+            <button onClick={saveOrder} disabled={loading} className="w-full py-6 bg-[#8e24aa] text-white rounded-[2rem] font-black text-xl shadow-lg shadow-purple-100 active:scale-[0.98] transition-all flex items-center justify-center gap-4">
+              {loading ? <div className="animate-spin h-5 w-5 border-2 border-white/50 border-t-white rounded-full"></div> : <>Enviar Solicitud <ShoppingCart size={24} /></>}
             </button>
-            <button onClick={() => setStep(4)} className="mt-6 text-gray-300 font-bold text-xs underline block w-full text-center hover:text-purple-400 transition-colors">Corregir datos</button>
+            <button onClick={() => setStep(5)} className="mt-6 text-gray-300 font-bold text-xs underline block w-full text-center hover:text-purple-400 transition-colors">Corregir datos</button>
           </div>
         )}
       </div>
@@ -495,60 +567,90 @@ export default function App() {
                 </div>
               )}
 
-              <button onClick={() => {setShowAdmin(false); setIsAdminAuth(false);}} className="absolute top-4 right-4 sm:static p-2 hover:bg-gray-200 rounded-full transition-colors text-gray-400"><X size={28}/></button>
+              <button onClick={() => {setShowAdmin(false); setIsAdminAuth(false); setAdminUser(''); setAdminPass('');}} className="absolute top-4 right-4 sm:static p-2 hover:bg-gray-200 rounded-full transition-colors text-gray-400"><X size={28}/></button>
             </div>
 
             <div className="p-4 sm:p-10 overflow-y-auto flex-1 bg-white">
               {!isAdminAuth ? (
-                <div className="py-20 flex flex-col items-center gap-6 text-center max-w-xs mx-auto">
-                  <input type="password" placeholder="Clave Admin" className="w-full p-6 border-2 border-gray-100 rounded-3xl text-center focus:border-purple-300 outline-none font-bold text-2xl" value={adminPass} onChange={e => setAdminPass(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleAdminLogin()}/>
-                  <button onClick={handleAdminLogin} className="w-full py-5 bg-purple-500 text-white rounded-3xl font-black">Acceder</button>
+                <div className="py-10 flex flex-col items-center gap-6 text-center max-w-xs mx-auto">
+                  <div className="w-full space-y-4">
+                    <div className="space-y-1">
+                       <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest block text-left">Usuario</label>
+                       <input type="text" placeholder="Usuario Admin" className="w-full p-4 border-2 border-gray-100 rounded-2xl focus:border-purple-300 outline-none font-bold" value={adminUser} onChange={e => setAdminUser(e.target.value)}/>
+                    </div>
+                    <div className="space-y-1">
+                       <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest block text-left">Contraseña</label>
+                       <input type="password" placeholder="Clave Admin" className="w-full p-4 border-2 border-gray-100 rounded-2xl focus:border-purple-300 outline-none font-bold" value={adminPass} onChange={e => setAdminPass(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleAdminLogin()}/>
+                    </div>
+                  </div>
+                  <button onClick={handleAdminLogin} className="w-full py-5 bg-purple-500 text-white rounded-3xl font-black shadow-lg shadow-purple-100">Acceder al Sistema</button>
                 </div>
               ) : (
                 <div className="space-y-10 pb-10 text-left">
-                  {/* Resumen de estadísticas (solo en pestaña Activos) */}
+                  {/* SEARCH BAR (Historial) */}
+                  {adminTab === 'historial' && (
+                    <div className="relative group">
+                       <Search className="absolute left-6 top-1/2 -translate-y-1/2 text-gray-300 group-focus-within:text-purple-500 transition-colors" size={20}/>
+                       <input 
+                         type="text" 
+                         placeholder="Busca por nombre, temática, celular o kit..." 
+                         className="w-full p-6 pl-16 bg-gray-50 border-none rounded-[2.5rem] font-bold text-gray-700 outline-none shadow-inner focus:ring-4 focus:ring-purple-100 transition-all"
+                         value={searchTerm}
+                         onChange={e => setSearchTerm(e.target.value)}
+                       />
+                    </div>
+                  )}
+
+                  {/* Stats Cards (Solo Activos) */}
                   {adminTab === 'activos' && (
                     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                       <div className="bg-gradient-to-br from-purple-600 to-indigo-600 p-8 rounded-[3rem] text-white shadow-xl shadow-purple-100 flex flex-col justify-between">
                         <div className="flex justify-between items-start">
                           <TrendingUp size={24}/>
-                          <span className="text-[10px] font-black uppercase tracking-widest opacity-60">Ingresos Totales (Sin rechazados)</span>
+                          <span className="text-[10px] font-black uppercase tracking-widest opacity-60">Ingresos Potenciales (Activos)</span>
                         </div>
                         <p className="text-4xl sm:text-5xl font-black tracking-tighter leading-none mt-8">${stats.totalRevenue.toLocaleString()}</p>
                       </div>
-                      <div className="lg:col-span-2 bg-gray-50 p-8 rounded-[3rem] border border-gray-100">
-                        <div className="flex items-center gap-2 mb-6"><BarChart3 size={18} className="text-purple-500"/><h4 className="font-black text-gray-800 text-lg text-left">Performance</h4></div>
-                        <div className="space-y-4">
-                          {stats.kitStats.map(s => (
-                            <div key={s.name} className="space-y-1 text-left">
-                              <div className="flex justify-between text-[10px] font-black uppercase tracking-widest text-gray-400"><span>{s.name}</span><span>${s.revenue.toLocaleString()}</span></div>
-                              <div className="h-2 bg-white rounded-full overflow-hidden"><div className="h-full bg-purple-500" style={{ width: `${stats.totalRevenue > 0 ? (s.revenue / stats.totalRevenue) * 100 : 0}%` }}></div></div>
-                            </div>
-                          ))}
-                        </div>
+                      <div className="lg:col-span-2 bg-[#8e24aa] p-8 rounded-[3rem] text-white flex items-center justify-center text-center">
+                         <div>
+                            <p className="text-xs font-black uppercase tracking-[0.3em] mb-2 opacity-60">Recordatorio Administrativo</p>
+                            <p className="text-lg font-bold leading-relaxed italic">"La magia de Lelune está en el orden y el envío oportuno de los links."</p>
+                         </div>
                       </div>
                     </div>
                   )}
 
                   <div className="space-y-6 text-left">
-                    <h4 className="font-black text-gray-800 text-xl flex items-center gap-2 px-2 text-left">
-                      {adminTab === 'activos' ? <ClipboardList size={20} className="text-indigo-500"/> : <History size={20} className="text-gray-500"/>}
-                      {adminTab === 'activos' ? 'Pedidos por procesar' : 'Historial de pedidos'}
-                    </h4>
+                    <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 px-2">
+                       <h4 className="font-black text-gray-800 text-xl flex items-center gap-2">
+                         {adminTab === 'activos' ? <ClipboardList size={20} className="text-indigo-500"/> : <History size={20} className="text-gray-500"/>}
+                         {adminTab === 'activos' ? 'Pedidos por Aprobar/Procesar' : 'Historial Lelune'}
+                       </h4>
+
+                       {/* History Filters */}
+                       {adminTab === 'historial' && (
+                         <div className="flex gap-2 p-1 bg-gray-100 rounded-2xl">
+                            <button onClick={() => setHistoryFilter('todos')} className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase transition-all ${historyFilter === 'todos' ? 'bg-white text-gray-800 shadow-sm' : 'text-gray-400'}`}>Todos</button>
+                            <button onClick={() => setHistoryFilter('listo')} className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase transition-all ${historyFilter === 'listo' ? 'bg-green-500 text-white shadow-sm' : 'text-gray-400'}`}>Terminados</button>
+                            <button onClick={() => setHistoryFilter('rechazado')} className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase transition-all ${historyFilter === 'rechazado' ? 'bg-red-500 text-white shadow-sm' : 'text-gray-400'}`}>Rechazados</button>
+                         </div>
+                       )}
+                    </div>
                     
                     {filteredOrders.length === 0 ? (
-                      <div className="py-20 text-center text-gray-300 font-black uppercase tracking-widest bg-gray-50 rounded-[2rem] border border-dashed">
-                        No hay pedidos en esta sección
+                      <div className="py-20 text-center text-gray-300 font-black uppercase tracking-widest bg-gray-50 rounded-[2rem] border border-dashed flex flex-col items-center gap-4">
+                        <ShoppingBag size={48} className="opacity-20"/>
+                        No se encontraron resultados
                       </div>
                     ) : (
                       <div className="flex flex-col gap-4">
                         {filteredOrders.map(o => {
                           const isDeadlineSoon = DELIVERY_DATES.find(d => d.id === o.deliveryDateId)?.isUrgent;
                           return (
-                            <div key={o.id} className={`w-full p-6 sm:p-8 rounded-[2rem] border transition-all flex flex-col gap-6 ${o.status === 'listo' ? 'bg-green-50/50 border-green-100' : o.status === 'rechazado' ? 'bg-red-50/50 border-red-100 opacity-80' : 'bg-white border-gray-100 shadow-sm'}`}>
+                            <div key={o.id} className={`w-full p-6 sm:p-8 rounded-[2rem] border transition-all flex flex-col gap-6 ${o.status === 'listo' ? 'bg-green-50/50 border-green-100' : o.status === 'rechazado' ? 'bg-red-50 opacity-80 border-red-100' : 'bg-white border-gray-100 shadow-sm'}`}>
                               
                               {/* Header Card */}
-                              <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                              <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
                                 <div className="space-y-1">
                                   <div className="flex flex-wrap items-center gap-3">
                                     <span className="text-[10px] font-black text-gray-300 uppercase">{o.createdAt?.toDate ? o.createdAt.toDate().toLocaleDateString('es-CL') : 'Reciente'}</span>
@@ -559,7 +661,7 @@ export default function App() {
                                   </div>
                                   <p className="font-black text-gray-800 text-2xl leading-none text-left">{o.parentName}</p>
                                 </div>
-                                <div className="text-left md:text-right">
+                                <div className="text-left lg:text-right">
                                   <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest leading-none">Total</p>
                                   <p className="font-black text-purple-600 text-3xl tracking-tighter leading-none mt-1">${o.total?.toLocaleString()}</p>
                                 </div>
@@ -570,17 +672,17 @@ export default function App() {
                                 <span className="text-xs font-bold text-gray-500 uppercase flex items-center gap-1.5"><Star size={14} className="text-purple-400"/> {o.studentName}</span>
                                 <span className="text-xs font-bold text-gray-500 uppercase flex items-center gap-1.5"><Package size={14} className="text-purple-400"/> {KITS.find(k => k.id === o.selectedKit)?.name || 'Personalizado'}</span>
                                 <span className="text-xs font-bold text-gray-500 uppercase flex items-center gap-1.5"><MapPin size={14} className="text-purple-400"/> {o.deliveryType === 'envio' ? o.commune : 'Retiro'}</span>
-                                <span className="text-xs font-bold text-gray-500 uppercase flex items-center gap-1.5"><Phone size={14} className="text-purple-400"/> {o.phone}</span>
+                                <span className="text-xs font-bold text-gray-500 uppercase flex items-center gap-1.5"><CreditCard size={14} className="text-purple-400"/> {o.paymentMethod === 'mercado_pago' ? 'Mercado Pago' : 'Transferencia'}</span>
                               </div>
 
-                              {/* Action Buttons (Responsive Grid) */}
+                              {/* Action Buttons (Aceptar envía el link automáticamente) */}
                               <div className="grid grid-cols-1 sm:grid-cols-2 md:flex md:flex-row gap-3 w-full border-t border-gray-100 pt-6">
                                 <a 
                                   href={`https://wa.me/56${o.phone}`} 
                                   target="_blank" 
                                   className="p-4 bg-green-500 text-white rounded-2xl flex items-center justify-center gap-2 text-[10px] font-black uppercase tracking-widest shadow-lg shadow-green-100 hover:scale-[1.02] transition-all"
                                 >
-                                  <Phone size={14}/> WhatsApp
+                                  <Phone size={14}/> WhatsApp Directo
                                 </a>
                                 
                                 {o.status === 'pendiente' && (
@@ -589,7 +691,7 @@ export default function App() {
                                       onClick={() => updateOrderStatus(o.id, 'aceptado')} 
                                       className="p-4 bg-blue-500 text-white rounded-2xl flex items-center justify-center gap-2 text-[10px] font-black uppercase tracking-widest shadow-lg shadow-blue-100 hover:scale-[1.02] transition-all"
                                     >
-                                      <ThumbsUp size={14}/> Aceptar
+                                      <ThumbsUp size={14}/> Aceptar (Envía Link)
                                     </button>
                                     <button 
                                       onClick={() => updateOrderStatus(o.id, 'rechazado')} 
@@ -603,18 +705,18 @@ export default function App() {
                                 {o.status === 'aceptado' && (
                                   <button 
                                     onClick={() => updateOrderStatus(o.id, 'listo')} 
-                                    className="p-4 bg-purple-500 text-white rounded-2xl flex items-center justify-center gap-2 text-[10px] font-black uppercase tracking-widest shadow-lg shadow-purple-100 hover:scale-[1.02] transition-all md:flex-1"
+                                    className="p-4 bg-[#8e24aa] text-white rounded-2xl flex items-center justify-center gap-2 text-[10px] font-black uppercase tracking-widest shadow-lg shadow-purple-100 hover:scale-[1.02] transition-all md:flex-1"
                                   >
-                                    <CheckCircle2 size={14}/> Finalizar
+                                    <CheckCircle2 size={14}/> Finalizar Pedido
                                   </button>
                                 )}
 
-                                {(o.status === 'listo' || o.status === 'rechazado') && (
+                                {o.status === 'rechazado' && (
                                   <button 
                                     onClick={() => updateOrderStatus(o.id, 'pendiente')} 
                                     className="p-4 bg-gray-100 text-gray-400 rounded-2xl flex items-center justify-center gap-2 text-[10px] font-black uppercase tracking-widest hover:bg-gray-200 transition-all md:flex-1"
                                   >
-                                    Reabrir Pedido
+                                    Reabrir Solicitud
                                   </button>
                                 )}
                               </div>
@@ -630,6 +732,15 @@ export default function App() {
           </div>
         </div>
       )}
+
+      <style dangerouslySetInnerHTML={{ __html: `
+        @import url('https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&display=swap');
+        .custom-scrollbar::-webkit-scrollbar { width: 5px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #e9d5ff; border-radius: 10px; }
+        input, select { font-size: 16px !important; }
+        .animate-in { animation: fadeIn 0.5s ease-out; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+      `}} />
     </div>
   );
 }
