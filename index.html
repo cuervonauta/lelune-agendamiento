@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+    <!-- Optimización para móviles: evita el zoom automático al escribir en campos de texto -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <title>Lelune - Agendamiento Premium 2026</title>
+    
+    <!-- 1. Fuente Nunito: La tipografía oficial del look Premium de Lelune -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+    
+    <!-- 2. Tailwind CSS: Cargado para asegurar que los estilos funcionen de inmediato -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <style>
+      /* Estilos base globales para evitar parpadeos visuales al cargar */
+      body { 
+        font-family: 'Nunito', sans-serif; 
+        background-color: #f8f7ff; 
+        margin: 0;
+        padding: 0;
+        -webkit-tap-highlight-color: transparent;
+      }
+    </style>
+  </head>
+  <body>
+    <!-- Este es el contenedor donde se inyectará toda la App -->
+    <div id="root"></div>
+    
+    <!-- Esta línea es CRUCIAL: conecta el HTML con el archivo de inicio de React -->
+    <script type="module" src="/src/main.jsx"></script>
+  </body>
+</html>
