@@ -21,7 +21,9 @@ import {
   BarChart3,
   AlertCircle,
   ThumbsUp,
-  ThumbsDown
+  ThumbsDown,
+  History,
+  ClipboardList
 } from 'lucide-react';
 import { initializeApp } from 'firebase/app';
 import { 
@@ -92,6 +94,7 @@ export default function App() {
   const [isAdminAuth, setIsAdminAuth] = useState(false);
   const [orders, setOrders] = useState([]);
   const [statusMessage, setStatusMessage] = useState(null);
+  const [adminTab, setAdminTab] = useState('activos'); // 'activos' o 'historial'
   
   const [formData, setFormData] = useState({
     parentName: '', 
@@ -144,7 +147,6 @@ export default function App() {
   }, [formData.selectedKit, formData.selectedItems]);
 
   const stats = useMemo(() => {
-    // Solo contar ingresos de pedidos aceptados o completados
     const totalRevenue = orders
       .filter(o => o.status !== 'rechazado')
       .reduce((acc, curr) => acc + (curr.total || 0), 0);
@@ -157,6 +159,15 @@ export default function App() {
     }));
     return { kitStats, totalRevenue };
   }, [orders]);
+
+  // Filtrado de pedidos para el Admin
+  const filteredOrders = useMemo(() => {
+    if (adminTab === 'activos') {
+      return orders.filter(o => o.status === 'pendiente' || o.status === 'aceptado');
+    } else {
+      return orders.filter(o => o.status === 'listo' || o.status === 'rechazado');
+    }
+  }, [orders, adminTab]);
 
   // Navegación
   const next = () => { window.scrollTo(0, 0); setStep(s => s + 1); };
@@ -226,10 +237,9 @@ export default function App() {
       const orderRef = doc(db, 'orders', orderId);
       await updateDoc(orderRef, { status: newStatus });
       
-      // Si se rechaza, preparamos un mensaje cordial
       if (newStatus === 'rechazado') {
         const order = orders.find(o => o.id === orderId);
-        const msg = `Hola ${order.parentName}! 🌙 Te escribimos de Lelune. Lamentamos informarte que no hemos podido aceptar tu pedido en este momento. Si tienes dudas, por favor contáctanos por aquí. ¡Muchas gracias!`;
+        const msg = `Hola ${order.parentName}! 🌙 Te escribimos de Lelune. Lamentamos informarte que no hemos podido aceptar tu pedido en este momento de manera cordial. Si tienes dudas, por favor contáctanos por aquí. ¡Muchas gracias!`;
         window.open(`https://wa.me/56${order.phone}?text=${encodeURIComponent(msg)}`, '_blank');
       }
     } catch (e) { console.error(e); }
@@ -399,7 +409,7 @@ export default function App() {
               <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Fecha Programada</p>
               <div className="grid grid-cols-1 gap-2 max-h-[25vh] overflow-y-auto pr-2 custom-scrollbar">
                 {DELIVERY_DATES.map(d => (
-                  <div key={d.id} onClick={() => !d.closed && setFormData({...formData, deliveryDateId: d.id})} className={`p-4 border-2 rounded-2xl flex items-center gap-4 transition-all ${d.closed ? 'opacity-40 grayscale cursor-not-allowed bg-gray-50' : formData.deliveryDateId == d.id ? 'border-purple-500 bg-purple-50 cursor-pointer shadow-sm' : 'border-gray-50 bg-white hover:border-purple-100 cursor-pointer'}`}>
+                  <div key={d.id} onClick={() => !d.closed && setFormData({...formData, deliveryDateId: d.id})} className={`p-4 border-2 rounded-2xl flex items-center gap-4 transition-all ${d.closed ? 'opacity-40 grayscale cursor-not-allowed bg-gray-50' : formData.deliveryDateId == d.id ? 'border-purple-500 bg-purple-50 cursor-pointer shadow-sm' : 'border-gray-50 bg-white hover:border-purple-100'}`}>
                     <div className={`w-4 h-4 rounded-full border-2 ${d.closed ? 'border-gray-300' : formData.deliveryDateId === d.id ? 'bg-purple-500 border-purple-500' : 'border-gray-200'}`}></div>
                     <div className="leading-none text-left flex-1">
                       <p className={`font-black text-sm ${d.closed ? 'text-gray-400' : 'text-gray-700'}`}>{d.label}</p>
@@ -460,17 +470,35 @@ export default function App() {
       {/* MODAL ADMIN */}
       {showAdmin && (
         <div className="fixed inset-0 bg-gray-900/60 z-[110] flex items-center justify-center p-2 sm:p-4 backdrop-blur-xl animate-in duration-300">
-          <div className="bg-white rounded-[2rem] sm:rounded-[4rem] w-full max-w-7xl h-[95vh] sm:h-[90vh] overflow-hidden flex flex-col shadow-2xl relative">
+          <div className="bg-white rounded-[2rem] sm:rounded-[3rem] w-full max-w-7xl h-[95vh] sm:h-[90vh] overflow-hidden flex flex-col shadow-2xl relative">
             
-            <div className="p-6 sm:p-10 border-b flex justify-between items-center bg-gray-50/50">
+            <div className="p-4 sm:p-10 border-b flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-gray-50/50">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 bg-purple-500 rounded-xl flex items-center justify-center text-white shadow-lg"><Database size={20}/></div>
                 <div><h3 className="text-lg sm:text-2xl font-black text-gray-800 leading-none">Panel Lelune</h3></div>
               </div>
-              <button onClick={() => {setShowAdmin(false); setIsAdminAuth(false);}} className="p-2 hover:bg-gray-200 rounded-full transition-colors text-gray-400 hover:text-red-500"><X size={28}/></button>
+              
+              {isAdminAuth && (
+                <div className="flex bg-gray-200/50 p-1 rounded-2xl w-full sm:w-auto">
+                  <button 
+                    onClick={() => setAdminTab('activos')}
+                    className={`flex-1 sm:flex-none px-6 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-all flex items-center justify-center gap-2 ${adminTab === 'activos' ? 'bg-white text-purple-600 shadow-sm' : 'text-gray-400 hover:text-gray-600'}`}
+                  >
+                    <ClipboardList size={14}/> Activos
+                  </button>
+                  <button 
+                    onClick={() => setAdminTab('historial')}
+                    className={`flex-1 sm:flex-none px-6 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-all flex items-center justify-center gap-2 ${adminTab === 'historial' ? 'bg-white text-purple-600 shadow-sm' : 'text-gray-400 hover:text-gray-600'}`}
+                  >
+                    <History size={14}/> Historial
+                  </button>
+                </div>
+              )}
+
+              <button onClick={() => {setShowAdmin(false); setIsAdminAuth(false);}} className="absolute top-4 right-4 sm:static p-2 hover:bg-gray-200 rounded-full transition-colors text-gray-400"><X size={28}/></button>
             </div>
 
-            <div className="p-6 sm:p-10 overflow-y-auto flex-1 bg-white">
+            <div className="p-4 sm:p-10 overflow-y-auto flex-1 bg-white">
               {!isAdminAuth ? (
                 <div className="py-20 flex flex-col items-center gap-6 text-center max-w-xs mx-auto">
                   <input type="password" placeholder="Clave Admin" className="w-full p-6 border-2 border-gray-100 rounded-3xl text-center focus:border-purple-300 outline-none font-bold text-2xl" value={adminPass} onChange={e => setAdminPass(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleAdminLogin()}/>
@@ -478,85 +506,123 @@ export default function App() {
                 </div>
               ) : (
                 <div className="space-y-10 pb-10 text-left">
-                  <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                    <div className="bg-gradient-to-br from-purple-600 to-indigo-600 p-8 rounded-[3rem] text-white shadow-xl shadow-purple-100 flex flex-col justify-between">
-                      <div className="flex justify-between items-start">
-                        <TrendingUp size={24}/>
-                        <span className="text-[10px] font-black uppercase tracking-widest opacity-60">Ingresos Totales</span>
+                  {/* Resumen de estadísticas (solo en pestaña Activos) */}
+                  {adminTab === 'activos' && (
+                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                      <div className="bg-gradient-to-br from-purple-600 to-indigo-600 p-8 rounded-[3rem] text-white shadow-xl shadow-purple-100 flex flex-col justify-between">
+                        <div className="flex justify-between items-start">
+                          <TrendingUp size={24}/>
+                          <span className="text-[10px] font-black uppercase tracking-widest opacity-60">Ingresos Totales (Sin rechazados)</span>
+                        </div>
+                        <p className="text-4xl sm:text-5xl font-black tracking-tighter leading-none mt-8">${stats.totalRevenue.toLocaleString()}</p>
                       </div>
-                      <p className="text-4xl sm:text-5xl font-black tracking-tighter leading-none mt-8">${stats.totalRevenue.toLocaleString()}</p>
-                    </div>
-                    <div className="lg:col-span-2 bg-gray-50 p-8 rounded-[3rem] border border-gray-100">
-                      <div className="flex items-center gap-2 mb-6"><BarChart3 size={18} className="text-purple-500"/><h4 className="font-black text-gray-800 text-lg text-left">Performance</h4></div>
-                      <div className="space-y-4">
-                        {stats.kitStats.map(s => (
-                          <div key={s.name} className="space-y-1 text-left">
-                            <div className="flex justify-between text-[10px] font-black uppercase tracking-widest text-gray-400"><span>{s.name}</span><span>${s.revenue.toLocaleString()}</span></div>
-                            <div className="h-2 bg-white rounded-full overflow-hidden"><div className="h-full bg-purple-500" style={{ width: `${stats.totalRevenue > 0 ? (s.revenue / stats.totalRevenue) * 100 : 0}%` }}></div></div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="space-y-4 text-left">
-                    <h4 className="font-black text-gray-800 text-xl flex items-center gap-2 px-2 text-left"><Clock size={20} className="text-indigo-500"/> Pedidos Recientes</h4>
-                    <div className="flex flex-col gap-4">
-                      {orders.map(o => {
-                        const isDeadlineSoon = DELIVERY_DATES.find(d => d.id === o.deliveryDateId)?.isUrgent;
-                        return (
-                          <div key={o.id} className={`w-full p-6 sm:p-8 rounded-[2.5rem] border transition-all flex flex-col lg:flex-row gap-6 items-start lg:items-center justify-between ${o.status === 'listo' ? 'bg-green-50/50 border-green-100' : o.status === 'rechazado' ? 'bg-red-50 opacity-60 border-red-100' : 'bg-white border-gray-100 hover:border-purple-200 shadow-sm'}`}>
-                            <div className="flex-1 space-y-2">
-                              <div className="flex flex-wrap items-center gap-3">
-                                <span className="text-[10px] font-black text-gray-300 uppercase">{o.createdAt?.toDate ? o.createdAt.toDate().toLocaleDateString('es-CL') : 'Reciente'}</span>
-                                {o.status === 'listo' && <span className="bg-green-500 text-white text-[9px] font-black px-2 py-1 rounded-lg uppercase">Completado</span>}
-                                {o.status === 'aceptado' && <span className="bg-blue-500 text-white text-[9px] font-black px-2 py-1 rounded-lg uppercase">Aceptado</span>}
-                                {o.status === 'rechazado' && <span className="bg-red-500 text-white text-[9px] font-black px-2 py-1 rounded-lg uppercase">Rechazado</span>}
-                                {isDeadlineSoon && o.status === 'pendiente' && <span className="bg-red-500 text-white text-[9px] font-black px-2 py-1 rounded-lg uppercase animate-pulse">Urgente</span>}
-                              </div>
-                              <p className="font-black text-gray-800 text-2xl leading-none text-left">{o.parentName}</p>
-                              <div className="flex flex-wrap gap-x-6 gap-y-2 pt-2 text-left">
-                                <span className="text-xs font-bold text-gray-400 uppercase flex items-center gap-1.5"><Star size={14} className="text-purple-400"/> {o.studentName}</span>
-                                <span className="text-xs font-bold text-gray-400 uppercase flex items-center gap-1.5"><Package size={14} className="text-purple-400"/> {KITS.find(k => k.id === o.selectedKit)?.name || 'Personalizado'}</span>
-                                <span className="text-xs font-bold text-gray-400 uppercase flex items-center gap-1.5"><MapPin size={14} className="text-purple-400"/> {o.deliveryType === 'envio' ? o.commune : 'Retiro'}</span>
-                              </div>
+                      <div className="lg:col-span-2 bg-gray-50 p-8 rounded-[3rem] border border-gray-100">
+                        <div className="flex items-center gap-2 mb-6"><BarChart3 size={18} className="text-purple-500"/><h4 className="font-black text-gray-800 text-lg text-left">Performance</h4></div>
+                        <div className="space-y-4">
+                          {stats.kitStats.map(s => (
+                            <div key={s.name} className="space-y-1 text-left">
+                              <div className="flex justify-between text-[10px] font-black uppercase tracking-widest text-gray-400"><span>{s.name}</span><span>${s.revenue.toLocaleString()}</span></div>
+                              <div className="h-2 bg-white rounded-full overflow-hidden"><div className="h-full bg-purple-500" style={{ width: `${stats.totalRevenue > 0 ? (s.revenue / stats.totalRevenue) * 100 : 0}%` }}></div></div>
                             </div>
-                            <div className="flex flex-col sm:flex-row items-end sm:items-center gap-6 w-full lg:w-auto">
-                              <div className="text-right">
-                                <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest leading-none">Total</p>
-                                <p className="font-black text-purple-600 text-3xl tracking-tighter leading-none mt-1">${o.total?.toLocaleString()}</p>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="space-y-6 text-left">
+                    <h4 className="font-black text-gray-800 text-xl flex items-center gap-2 px-2 text-left">
+                      {adminTab === 'activos' ? <ClipboardList size={20} className="text-indigo-500"/> : <History size={20} className="text-gray-500"/>}
+                      {adminTab === 'activos' ? 'Pedidos por procesar' : 'Historial de pedidos'}
+                    </h4>
+                    
+                    {filteredOrders.length === 0 ? (
+                      <div className="py-20 text-center text-gray-300 font-black uppercase tracking-widest bg-gray-50 rounded-[2rem] border border-dashed">
+                        No hay pedidos en esta sección
+                      </div>
+                    ) : (
+                      <div className="flex flex-col gap-4">
+                        {filteredOrders.map(o => {
+                          const isDeadlineSoon = DELIVERY_DATES.find(d => d.id === o.deliveryDateId)?.isUrgent;
+                          return (
+                            <div key={o.id} className={`w-full p-6 sm:p-8 rounded-[2rem] border transition-all flex flex-col gap-6 ${o.status === 'listo' ? 'bg-green-50/50 border-green-100' : o.status === 'rechazado' ? 'bg-red-50/50 border-red-100 opacity-80' : 'bg-white border-gray-100 shadow-sm'}`}>
+                              
+                              {/* Header Card */}
+                              <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                                <div className="space-y-1">
+                                  <div className="flex flex-wrap items-center gap-3">
+                                    <span className="text-[10px] font-black text-gray-300 uppercase">{o.createdAt?.toDate ? o.createdAt.toDate().toLocaleDateString('es-CL') : 'Reciente'}</span>
+                                    {o.status === 'listo' && <span className="bg-green-500 text-white text-[9px] font-black px-2 py-1 rounded-lg uppercase">Finalizado</span>}
+                                    {o.status === 'aceptado' && <span className="bg-blue-500 text-white text-[9px] font-black px-2 py-1 rounded-lg uppercase">En Proceso</span>}
+                                    {o.status === 'rechazado' && <span className="bg-red-500 text-white text-[9px] font-black px-2 py-1 rounded-lg uppercase">Rechazado</span>}
+                                    {isDeadlineSoon && o.status === 'pendiente' && <span className="bg-red-500 text-white text-[9px] font-black px-2 py-1 rounded-lg uppercase animate-pulse">Urgente</span>}
+                                  </div>
+                                  <p className="font-black text-gray-800 text-2xl leading-none text-left">{o.parentName}</p>
+                                </div>
+                                <div className="text-left md:text-right">
+                                  <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest leading-none">Total</p>
+                                  <p className="font-black text-purple-600 text-3xl tracking-tighter leading-none mt-1">${o.total?.toLocaleString()}</p>
+                                </div>
                               </div>
-                              <div className="flex gap-2 w-full sm:w-auto">
-                                <a href={`https://wa.me/56${o.phone}`} target="_blank" className="flex-1 sm:flex-none p-4 bg-green-500 text-white rounded-2xl flex items-center justify-center gap-2 text-[10px] font-black uppercase tracking-widest shadow-lg shadow-green-100"><Phone size={14}/> WhatsApp</a>
+
+                              {/* Info Content */}
+                              <div className="flex flex-wrap gap-x-6 gap-y-3 pt-2 text-left border-t border-gray-100 pt-4">
+                                <span className="text-xs font-bold text-gray-500 uppercase flex items-center gap-1.5"><Star size={14} className="text-purple-400"/> {o.studentName}</span>
+                                <span className="text-xs font-bold text-gray-500 uppercase flex items-center gap-1.5"><Package size={14} className="text-purple-400"/> {KITS.find(k => k.id === o.selectedKit)?.name || 'Personalizado'}</span>
+                                <span className="text-xs font-bold text-gray-500 uppercase flex items-center gap-1.5"><MapPin size={14} className="text-purple-400"/> {o.deliveryType === 'envio' ? o.commune : 'Retiro'}</span>
+                                <span className="text-xs font-bold text-gray-500 uppercase flex items-center gap-1.5"><Phone size={14} className="text-purple-400"/> {o.phone}</span>
+                              </div>
+
+                              {/* Action Buttons (Responsive Grid) */}
+                              <div className="grid grid-cols-1 sm:grid-cols-2 md:flex md:flex-row gap-3 w-full border-t border-gray-100 pt-6">
+                                <a 
+                                  href={`https://wa.me/56${o.phone}`} 
+                                  target="_blank" 
+                                  className="p-4 bg-green-500 text-white rounded-2xl flex items-center justify-center gap-2 text-[10px] font-black uppercase tracking-widest shadow-lg shadow-green-100 hover:scale-[1.02] transition-all"
+                                >
+                                  <Phone size={14}/> WhatsApp
+                                </a>
                                 
                                 {o.status === 'pendiente' && (
                                   <>
-                                    <button onClick={() => updateOrderStatus(o.id, 'aceptado')} className="flex-1 sm:flex-none p-4 bg-blue-500 text-white rounded-2xl flex items-center justify-center gap-2 text-[10px] font-black uppercase tracking-widest shadow-lg shadow-blue-100">
+                                    <button 
+                                      onClick={() => updateOrderStatus(o.id, 'aceptado')} 
+                                      className="p-4 bg-blue-500 text-white rounded-2xl flex items-center justify-center gap-2 text-[10px] font-black uppercase tracking-widest shadow-lg shadow-blue-100 hover:scale-[1.02] transition-all"
+                                    >
                                       <ThumbsUp size={14}/> Aceptar
                                     </button>
-                                    <button onClick={() => updateOrderStatus(o.id, 'rechazado')} className="flex-1 sm:flex-none p-4 bg-red-500 text-white rounded-2xl flex items-center justify-center gap-2 text-[10px] font-black uppercase tracking-widest shadow-lg shadow-red-100">
+                                    <button 
+                                      onClick={() => updateOrderStatus(o.id, 'rechazado')} 
+                                      className="p-4 bg-red-500 text-white rounded-2xl flex items-center justify-center gap-2 text-[10px] font-black uppercase tracking-widest shadow-lg shadow-red-100 hover:scale-[1.02] transition-all"
+                                    >
                                       <ThumbsDown size={14}/> Rechazar
                                     </button>
                                   </>
                                 )}
 
                                 {o.status === 'aceptado' && (
-                                  <button onClick={() => updateOrderStatus(o.id, 'listo')} className="flex-1 sm:flex-none p-4 bg-purple-500 text-white rounded-2xl flex items-center justify-center gap-2 text-[10px] font-black uppercase tracking-widest shadow-lg shadow-purple-100">
-                                    <CheckCircle2 size={14}/> Completar
+                                  <button 
+                                    onClick={() => updateOrderStatus(o.id, 'listo')} 
+                                    className="p-4 bg-purple-500 text-white rounded-2xl flex items-center justify-center gap-2 text-[10px] font-black uppercase tracking-widest shadow-lg shadow-purple-100 hover:scale-[1.02] transition-all md:flex-1"
+                                  >
+                                    <CheckCircle2 size={14}/> Finalizar
                                   </button>
                                 )}
 
                                 {(o.status === 'listo' || o.status === 'rechazado') && (
-                                  <button onClick={() => updateOrderStatus(o.id, 'pendiente')} className="flex-1 sm:flex-none p-4 bg-gray-100 text-gray-400 rounded-2xl flex items-center justify-center gap-2 text-[10px] font-black uppercase tracking-widest">
-                                    Reabrir
+                                  <button 
+                                    onClick={() => updateOrderStatus(o.id, 'pendiente')} 
+                                    className="p-4 bg-gray-100 text-gray-400 rounded-2xl flex items-center justify-center gap-2 text-[10px] font-black uppercase tracking-widest hover:bg-gray-200 transition-all md:flex-1"
+                                  >
+                                    Reabrir Pedido
                                   </button>
                                 )}
                               </div>
                             </div>
-                          </div>
-                        );
-                      })}
-                    </div>
+                          );
+                        })}
+                      </div>
+                    )}
                   </div>
                 </div>
               )}
