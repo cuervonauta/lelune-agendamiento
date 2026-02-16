@@ -27,7 +27,10 @@ import {
   Search,
   CreditCard,
   Info,
-  User as UserIcon
+  User as UserIcon,
+  School,
+  GraduationCap,
+  Palette
 } from 'lucide-react';
 import { initializeApp } from 'firebase/app';
 import { 
@@ -108,6 +111,8 @@ export default function App() {
     phone: '', 
     studentName: '', 
     theme: '', 
+    school: '',
+    grade: '',
     selectedKit: '', 
     selectedItems: [], 
     paymentMethod: '', 
@@ -179,7 +184,8 @@ export default function App() {
         o.parentName?.toLowerCase().includes(lowSearch) ||
         o.studentName?.toLowerCase().includes(lowSearch) ||
         o.phone?.includes(searchTerm) ||
-        o.theme?.toLowerCase().includes(lowSearch)
+        o.theme?.toLowerCase().includes(lowSearch) ||
+        o.school?.toLowerCase().includes(lowSearch)
       );
     }
     return baseList;
@@ -215,7 +221,11 @@ export default function App() {
       
       const kitName = KITS.find(k => k.id === formData.selectedKit)?.name || 'Ninguno';
       const addressFull = formData.deliveryType === 'envio' ? `${formData.street} ${formData.houseNumber}, ${formData.commune}` : 'Retiro en Local';
-      const msg = `Hola Lelune! 🌙 Nuevo pedido:\n👤 Cliente: ${formData.parentName}\n🎒 Alumno: ${formData.studentName}\n📦 Kit: ${kitName}\n💳 Pago elegido: ${formData.paymentMethod === 'mercado_pago' ? 'Mercado Pago (Link)' : 'Transferencia'}\n📍 Entrega: ${addressFull}\n💰 Total: $${totalAmount.toLocaleString('es-CL')}`;
+      
+      let msg = `Hola Lelune! 🌙 Nuevo pedido:\n👤 Cliente: ${formData.parentName}\n🎒 Alumno: ${formData.studentName}\n🎨 Temática: ${formData.theme}`;
+      if (formData.school) msg += `\n🏫 Colegio: ${formData.school}`;
+      if (formData.grade) msg += `\n🎓 Grado: ${formData.grade}`;
+      msg += `\n📦 Kit: ${kitName}\n💳 Pago elegido: ${formData.paymentMethod === 'mercado_pago' ? 'Mercado Pago (Link)' : 'Transferencia'}\n📍 Entrega: ${addressFull}\n💰 Total: $${totalAmount.toLocaleString('es-CL')}`;
       
       // WhatsApp Lelune (Notificación para el comercio)
       window.open(`https://wa.me/56950732322?text=${encodeURIComponent(msg)}`, '_blank');
@@ -223,7 +233,7 @@ export default function App() {
       setStatusMessage({ type: 'success', text: '¡Solicitud enviada!' });
       setStep(0);
       setFormData({ 
-        parentName: '', phone: '', studentName: '', theme: '', 
+        parentName: '', phone: '', studentName: '', theme: '', school: '', grade: '',
         selectedKit: '', selectedItems: [], paymentMethod: '', deliveryType: '', 
         commune: '', street: '', houseNumber: '', receiverName: '', altPhone: '', deliveryDateId: '' 
       });
@@ -324,14 +334,14 @@ export default function App() {
 
         {step === 1 && (
           <div className="p-8 sm:p-10 space-y-8 text-left animate-in">
-            <h2 className="text-2xl sm:text-3xl font-black text-gray-800 tracking-tight">¡Hola! ✨</h2>
+            <h2 className="text-2xl sm:text-3xl font-black text-gray-800 tracking-tight text-left">¡Hola! ✨</h2>
             <div className="space-y-6">
               <div className="space-y-1">
-                <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1 block">Tu Nombre</label>
+                <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1 block text-left">Tu Nombre</label>
                 <input type="text" placeholder="Ej: María Paz Silva" className="w-full p-5 sm:p-6 bg-gray-50 border-none rounded-3xl font-bold text-gray-700 shadow-sm focus:ring-2 focus:ring-purple-200 outline-none" value={formData.parentName} onChange={e => setFormData({...formData, parentName: e.target.value})} />
               </div>
               <div className="space-y-1">
-                <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1 block">WhatsApp</label>
+                <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1 block text-left">WhatsApp</label>
                 <div className="flex items-center bg-gray-50 rounded-3xl shadow-sm focus-within:ring-2 focus-within:ring-purple-200 transition-all overflow-hidden pr-4">
                   <span className="pl-6 font-bold text-gray-400 text-base">+56</span>
                   <input type="text" placeholder="9 1234 5678" className="w-full p-5 sm:p-6 bg-transparent outline-none font-bold text-gray-700 text-base border-none" value={formData.phone} onChange={e => setFormData({...formData, phone: e.target.value.replace(/\D/g, '')})} />
@@ -344,15 +354,36 @@ export default function App() {
 
         {step === 2 && (
           <div className="p-8 sm:p-10 space-y-8 text-left animate-in">
-            <h2 className="text-2xl sm:text-3xl font-black text-gray-800 tracking-tight">Personalización 🎒</h2>
-            <div className="space-y-6">
+            <h2 className="text-2xl sm:text-3xl font-black text-gray-800 tracking-tight text-left">Personalización 🎒</h2>
+            
+            <div className="space-y-5">
               <div className="space-y-1">
-                <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1 block">Nombre en Etiquetas</label>
-                <input type="text" placeholder="Ej: Mateo González A." className="w-full p-5 sm:p-6 bg-gray-50 border-none rounded-3xl font-bold text-gray-700 shadow-sm focus:ring-2 focus:ring-purple-200 outline-none" value={formData.studentName} onChange={e => setFormData({...formData, studentName: e.target.value})} />
+                <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1 block text-left">Nombre en Etiquetas</label>
+                <input type="text" placeholder="Ej: Mateo González A." className="w-full p-5 bg-gray-50 border-none rounded-3xl font-bold text-gray-700 shadow-sm focus:ring-2 focus:ring-purple-200 outline-none" value={formData.studentName} onChange={e => setFormData({...formData, studentName: e.target.value})} />
               </div>
               <div className="space-y-1">
-                <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1 block">Temática</label>
-                <input type="text" placeholder="Ej: Bluey, Astronautas..." className="w-full p-5 sm:p-6 bg-gray-50 border-none rounded-3xl font-bold text-gray-700 shadow-sm focus:ring-2 focus:ring-purple-200 outline-none" value={formData.theme} onChange={e => setFormData({...formData, theme: e.target.value})} />
+                <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1 block text-left">Temática</label>
+                <input type="text" placeholder="Ej: Bluey, Astronautas..." className="w-full p-5 bg-gray-50 border-none rounded-3xl font-bold text-gray-700 shadow-sm focus:ring-2 focus:ring-purple-200 outline-none" value={formData.theme} onChange={e => setFormData({...formData, theme: e.target.value})} />
+              </div>
+
+              {/* Información Opcional */}
+              <div className="space-y-4 pt-4 border-t border-gray-100">
+                <div className="flex items-center gap-2 mb-2">
+                   <Info size={14} className="text-purple-400"/>
+                   <p className="text-[10px] font-bold text-gray-400 leading-tight">
+                     Nota: Si no incluyes el colegio o grado, esta información no aparecerá en tus etiquetas.
+                   </p>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-left">
+                  <div className="space-y-1 text-left">
+                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1 block text-left">Colegio (Opcional)</label>
+                    <input type="text" placeholder="Ej: Lincoln" className="w-full p-4 bg-gray-50 border-none rounded-2xl font-bold text-gray-700 shadow-sm focus:ring-2 focus:ring-purple-100 outline-none" value={formData.school} onChange={e => setFormData({...formData, school: e.target.value})} />
+                  </div>
+                  <div className="space-y-1 text-left">
+                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1 block text-left">Grado (Opcional)</label>
+                    <input type="text" placeholder="Ej: 2° Básico B" className="w-full p-4 bg-gray-50 border-none rounded-2xl font-bold text-gray-700 shadow-sm focus:ring-2 focus:ring-purple-100 outline-none" value={formData.grade} onChange={e => setFormData({...formData, grade: e.target.value})} />
+                  </div>
+                </div>
               </div>
             </div>
             <button onClick={next} disabled={!formData.studentName || !formData.theme} className="w-full py-6 bg-purple-500 text-white rounded-3xl font-black text-lg shadow-xl shadow-purple-100 disabled:opacity-30 active:scale-[0.98] transition-all">Elegir Productos</button>
@@ -361,10 +392,10 @@ export default function App() {
 
         {step === 3 && (
           <div className="p-6 sm:p-10 space-y-6 text-left animate-in">
-            <h2 className="text-2xl sm:text-3xl font-black text-gray-800 tracking-tight">Tu Pedido 🎁</h2>
+            <h2 className="text-2xl sm:text-3xl font-black text-gray-800 tracking-tight text-left">Tu Pedido 🎁</h2>
             <div className="space-y-6 max-h-[50vh] overflow-y-auto pr-2 custom-scrollbar">
               <section className="space-y-3">
-                <p className="text-[10px] font-black text-purple-400 uppercase tracking-[0.2em] ml-2">1. Selecciona tu base</p>
+                <p className="text-[10px] font-black text-purple-400 uppercase tracking-[0.2em] ml-2 text-left">1. Selecciona tu base</p>
                 <div className="grid grid-cols-1 gap-3">
                   {KITS.map(k => (
                     <div key={k.id} onClick={() => setFormData({...formData, selectedKit: k.id})} className={`p-4 sm:p-5 border-2 rounded-[2rem] cursor-pointer transition-all ${formData.selectedKit === k.id ? 'border-purple-500 bg-purple-50 shadow-md scale-[1.01]' : 'border-gray-50 bg-white hover:border-purple-100'}`}>
@@ -372,14 +403,14 @@ export default function App() {
                         <span className={`font-black text-sm sm:text-base ${formData.selectedKit === k.id ? 'text-purple-600' : 'text-gray-700'}`}>{k.name}</span>
                         {k.price > 0 && <span className="text-[9px] sm:text-[10px] font-black bg-white px-2 py-1 rounded-lg border border-purple-100 text-purple-500">${k.price.toLocaleString()}</span>}
                       </div>
-                      <p className="text-[10px] text-gray-400 font-bold leading-relaxed">{k.desc}</p>
+                      <p className="text-[10px] text-gray-400 font-bold leading-relaxed text-left">{k.desc}</p>
                     </div>
                   ))}
                 </div>
               </section>
 
               <section className="space-y-3 border-t border-gray-100 pt-6">
-                <p className="text-[10px] font-black text-indigo-400 uppercase tracking-[0.2em] ml-2">2. Agrega Adicionales ✨</p>
+                <p className="text-[10px] font-black text-indigo-400 uppercase tracking-[0.2em] ml-2 text-left">2. Agrega Adicionales ✨</p>
                 <div className="grid grid-cols-1 gap-3">
                   {INDIVIDUAL_PRODUCTS.map(p => (
                     <div key={p.id} onClick={() => toggleItem(p.id)} className={`p-5 border-2 rounded-[1.8rem] cursor-pointer flex justify-between items-center transition-all ${formData.selectedItems.includes(p.id) ? 'border-indigo-400 bg-indigo-50 text-indigo-700 shadow-md' : 'border-gray-50 bg-white hover:border-indigo-100'}`}>
@@ -405,7 +436,7 @@ export default function App() {
 
         {step === 4 && (
           <div className="p-8 sm:p-10 space-y-8 text-left animate-in">
-            <h2 className="text-2xl sm:text-3xl font-black text-gray-800 tracking-tight">Medio de Pago 💳</h2>
+            <h2 className="text-2xl sm:text-3xl font-black text-gray-800 tracking-tight text-left">Medio de Pago 💳</h2>
             <div className="grid grid-cols-1 gap-4">
               <button 
                 onClick={() => setFormData({...formData, paymentMethod: 'transferencia'})}
@@ -434,7 +465,7 @@ export default function App() {
 
         {step === 5 && (
           <div className="p-6 sm:p-10 space-y-6 text-left animate-in">
-            <h2 className="text-2xl sm:text-3xl font-black text-gray-800 tracking-tight">Entrega 🚚</h2>
+            <h2 className="text-2xl sm:text-3xl font-black text-gray-800 tracking-tight text-left">Entrega 🚚</h2>
             <div className="flex flex-row gap-4">
               <button onClick={() => setFormData({...formData, deliveryType: 'retiro', commune: '', street: '', houseNumber: '', receiverName: formData.parentName})} className={`flex-1 p-6 border-2 rounded-[2rem] flex flex-col items-center gap-2 font-black transition-all ${formData.deliveryType === 'retiro' ? 'border-purple-500 bg-purple-50 text-purple-600 shadow-md' : 'border-gray-50 text-gray-300 hover:border-purple-100'}`}>
                 <MapPin size={24} /> <span className="text-sm">Retiro</span>
@@ -447,7 +478,7 @@ export default function App() {
             {formData.deliveryType === 'retiro' && (
               <div className="p-6 bg-blue-50 rounded-[2rem] border border-blue-100 flex gap-4 animate-in">
                 <Info size={24} className="text-blue-500 shrink-0 mt-1"/>
-                <p className="text-sm font-bold text-blue-700 leading-relaxed">
+                <p className="text-sm font-bold text-blue-700 leading-relaxed text-left">
                   Podrás retirar tu pedido en el punto de entrega que te indicaremos de manera personalizada a través de WhatsApp una vez que el pedido esté listo.
                 </p>
               </div>
@@ -466,11 +497,11 @@ export default function App() {
               </div>
             )}
 
-            <div className="space-y-2 pt-2">
-              <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Fecha Programada</p>
+            <div className="space-y-2 pt-2 text-left">
+              <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1 text-left block">Fecha Programada</p>
               <div className="grid grid-cols-1 gap-2 max-h-[25vh] overflow-y-auto pr-2 custom-scrollbar">
                 {DELIVERY_DATES.map(d => (
-                  <div key={d.id} onClick={() => !d.closed && setFormData({...formData, deliveryDateId: d.id})} className={`p-4 border-2 rounded-2xl flex items-center gap-4 transition-all ${d.closed ? 'opacity-40 grayscale cursor-not-allowed bg-gray-50' : formData.deliveryDateId == d.id ? 'border-purple-500 bg-purple-50 cursor-pointer shadow-sm' : 'border-gray-50 bg-white hover:border-purple-100'}`}>
+                  <div key={d.id} onClick={() => !d.closed && setFormData({...formData, deliveryDateId: d.id})} className={`p-4 border-2 rounded-2xl flex items-center gap-4 transition-all ${d.closed ? 'opacity-40 grayscale cursor-not-allowed bg-gray-50' : formData.deliveryDateId == d.id ? 'border-purple-500 bg-purple-50 cursor-pointer shadow-sm' : 'border-gray-50 bg-white hover:border-purple-100 cursor-pointer'}`}>
                     <div className={`w-4 h-4 rounded-full border-2 ${d.closed ? 'border-gray-300' : formData.deliveryDateId === d.id ? 'bg-purple-500 border-purple-500' : 'border-gray-200'}`}></div>
                     <div className="leading-none text-left flex-1">
                       <p className={`font-black text-sm ${d.closed ? 'text-gray-400' : 'text-gray-700'}`}>{d.label}</p>
@@ -497,30 +528,47 @@ export default function App() {
 
             <div className="bg-gray-50 p-6 sm:p-8 rounded-[2rem] text-left space-y-4 border border-gray-100 mb-8 relative overflow-hidden shadow-sm">
               <div className="absolute top-0 right-0 p-6 opacity-[0.03] -rotate-12 pointer-events-none"><ShoppingBag size={120} /></div>
-              <div className="relative z-10">
-                <p className="text-[10px] text-gray-400 font-black uppercase tracking-widest text-left">Datos</p>
-                <p className="font-black text-gray-700 text-lg leading-tight text-left">{formData.parentName} <span className="text-gray-300 mx-1">|</span> +56 {formData.phone}</p>
-                <p className="text-[10px] sm:text-xs font-bold text-gray-400 mt-1 uppercase text-left">🎒 {formData.studentName}</p>
-              </div>
-              <div className="relative z-10 pt-4 border-t border-gray-200/50 text-left">
-                <p className="text-[10px] text-gray-400 font-black uppercase tracking-widest mb-2">Pedido</p>
-                <div className="space-y-2">
-                  <p className="font-black text-purple-600 text-sm flex justify-between">
-                    <span>• {KITS.find(k => k.id === formData.selectedKit)?.name}</span>
-                    <span>${KITS.find(k => k.id === formData.selectedKit)?.price.toLocaleString()}</span>
-                  </p>
-                  {formData.selectedItems.map(id => (
-                    <p key={id} className="font-bold text-gray-500 text-[10px] sm:text-[11px] flex justify-between ml-2">
-                      <span>+ {INDIVIDUAL_PRODUCTS.find(p => p.id === id).name}</span>
-                      <span>${INDIVIDUAL_PRODUCTS.find(p => p.id === id).price.toLocaleString()}</span>
+              
+              <div className="relative z-10 space-y-4">
+                {/* Datos del Cliente */}
+                <div className="text-left">
+                  <p className="text-[10px] text-gray-400 font-black uppercase tracking-widest mb-1">Datos de Contacto</p>
+                  <p className="font-black text-gray-700 text-lg leading-tight">{formData.parentName} <span className="text-gray-300 mx-1">|</span> +56 {formData.phone}</p>
+                </div>
+
+                {/* Personalización */}
+                <div className="pt-4 border-t border-gray-200/50 text-left">
+                  <p className="text-[10px] text-gray-400 font-black uppercase tracking-widest mb-2">Personalización</p>
+                  <div className="space-y-1.5">
+                    <p className="text-sm font-bold text-gray-700 flex items-center gap-2"><UserIcon size={14} className="text-purple-400"/> 🎒 {formData.studentName}</p>
+                    <p className="text-sm font-bold text-gray-700 flex items-center gap-2"><Palette size={14} className="text-purple-400"/> 🎨 {formData.theme}</p>
+                    {formData.school && <p className="text-sm font-bold text-gray-700 flex items-center gap-2"><School size={14} className="text-purple-400"/> 🏫 {formData.school}</p>}
+                    {formData.grade && <p className="text-sm font-bold text-gray-700 flex items-center gap-2"><GraduationCap size={14} className="text-purple-400"/> 🎓 {formData.grade}</p>}
+                  </div>
+                </div>
+
+                {/* Pedido */}
+                <div className="pt-4 border-t border-gray-200/50 text-left">
+                  <p className="text-[10px] text-gray-400 font-black uppercase tracking-widest mb-2">Tu Pedido</p>
+                  <div className="space-y-2">
+                    <p className="font-black text-purple-600 text-sm flex justify-between">
+                      <span>• {KITS.find(k => k.id === formData.selectedKit)?.name}</span>
+                      <span>${KITS.find(k => k.id === formData.selectedKit)?.price.toLocaleString()}</span>
                     </p>
-                  ))}
-                  <p className="font-bold text-blue-600 text-xs mt-2 border-t border-blue-100 pt-2 flex justify-between">
-                    <span>💳 Pago elegido:</span>
-                    <span className="uppercase">{formData.paymentMethod === 'transferencia' ? 'Transferencia' : 'Mercado Pago'}</span>
-                  </p>
+                    {formData.selectedItems.map(id => (
+                      <p key={id} className="font-bold text-gray-500 text-[10px] sm:text-[11px] flex justify-between ml-2">
+                        <span>+ {INDIVIDUAL_PRODUCTS.find(p => p.id === id).name}</span>
+                        <span>${INDIVIDUAL_PRODUCTS.find(p => p.id === id).price.toLocaleString()}</span>
+                      </p>
+                    ))}
+                    <p className="font-bold text-blue-600 text-xs mt-2 border-t border-blue-100 pt-2 flex justify-between">
+                      <span>💳 Pago elegido:</span>
+                      <span className="uppercase">{formData.paymentMethod === 'transferencia' ? 'Transferencia' : 'Mercado Pago'}</span>
+                    </p>
+                  </div>
                 </div>
               </div>
+
               <div className="pt-4 border-t border-purple-100 flex justify-between items-end">
                 <p className="font-black text-gray-800 text-xl">Total</p>
                 <p className="font-black text-purple-500 text-3xl sm:text-4xl tracking-tighter">${totalAmount.toLocaleString()}</p>
@@ -576,11 +624,11 @@ export default function App() {
                   <div className="w-full space-y-4">
                     <div className="space-y-1">
                        <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest block text-left">Usuario</label>
-                       <input type="text" placeholder="Usuario Admin" className="w-full p-4 border-2 border-gray-100 rounded-2xl focus:border-purple-300 outline-none font-bold" value={adminUser} onChange={e => setAdminUser(e.target.value)}/>
+                       <input type="text" placeholder="Usuario Admin" className="w-full p-4 border-2 border-gray-100 rounded-2xl focus:border-purple-300 outline-none font-bold text-left" value={adminUser} onChange={e => setAdminUser(e.target.value)}/>
                     </div>
                     <div className="space-y-1">
                        <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest block text-left">Contraseña</label>
-                       <input type="password" placeholder="Clave Admin" className="w-full p-4 border-2 border-gray-100 rounded-2xl focus:border-purple-300 outline-none font-bold" value={adminPass} onChange={e => setAdminPass(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleAdminLogin()}/>
+                       <input type="password" placeholder="Clave Admin" className="w-full p-4 border-2 border-gray-100 rounded-2xl focus:border-purple-300 outline-none font-bold text-left" value={adminPass} onChange={e => setAdminPass(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleAdminLogin()}/>
                     </div>
                   </div>
                   <button onClick={handleAdminLogin} className="w-full py-5 bg-purple-500 text-white rounded-3xl font-black shadow-lg shadow-purple-100">Acceder al Sistema</button>
@@ -593,8 +641,8 @@ export default function App() {
                        <Search className="absolute left-6 top-1/2 -translate-y-1/2 text-gray-300 group-focus-within:text-purple-500 transition-colors" size={20}/>
                        <input 
                          type="text" 
-                         placeholder="Busca por nombre, temática, celular o kit..." 
-                         className="w-full p-6 pl-16 bg-gray-50 border-none rounded-[2.5rem] font-bold text-gray-700 outline-none shadow-inner focus:ring-4 focus:ring-purple-100 transition-all"
+                         placeholder="Busca por nombre, temática, colegio, celular o kit..." 
+                         className="w-full p-6 pl-16 bg-gray-50 border-none rounded-[2.5rem] font-bold text-gray-700 outline-none shadow-inner focus:ring-4 focus:ring-purple-100 transition-all text-left"
                          value={searchTerm}
                          onChange={e => setSearchTerm(e.target.value)}
                        />
@@ -650,7 +698,7 @@ export default function App() {
                             <div key={o.id} className={`w-full p-6 sm:p-8 rounded-[2rem] border transition-all flex flex-col gap-6 ${o.status === 'listo' ? 'bg-green-50/50 border-green-100' : o.status === 'rechazado' ? 'bg-red-50 opacity-80 border-red-100' : 'bg-white border-gray-100 shadow-sm'}`}>
                               
                               {/* Header Card */}
-                              <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
+                              <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 text-left">
                                 <div className="space-y-1">
                                   <div className="flex flex-wrap items-center gap-3">
                                     <span className="text-[10px] font-black text-gray-300 uppercase">{o.createdAt?.toDate ? o.createdAt.toDate().toLocaleDateString('es-CL') : 'Reciente'}</span>
@@ -663,19 +711,32 @@ export default function App() {
                                 </div>
                                 <div className="text-left lg:text-right">
                                   <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest leading-none">Total</p>
-                                  <p className="font-black text-purple-600 text-3xl tracking-tighter leading-none mt-1">${o.total?.toLocaleString()}</p>
+                                  <p className="font-black text-purple-600 text-3xl tracking-tighter leading-none mt-1 text-left lg:text-right">${o.total?.toLocaleString()}</p>
                                 </div>
                               </div>
 
-                              {/* Info Content */}
-                              <div className="flex flex-wrap gap-x-6 gap-y-3 pt-2 text-left border-t border-gray-100 pt-4">
-                                <span className="text-xs font-bold text-gray-500 uppercase flex items-center gap-1.5"><Star size={14} className="text-purple-400"/> {o.studentName}</span>
-                                <span className="text-xs font-bold text-gray-500 uppercase flex items-center gap-1.5"><Package size={14} className="text-purple-400"/> {KITS.find(k => k.id === o.selectedKit)?.name || 'Personalizado'}</span>
-                                <span className="text-xs font-bold text-gray-500 uppercase flex items-center gap-1.5"><MapPin size={14} className="text-purple-400"/> {o.deliveryType === 'envio' ? o.commune : 'Retiro'}</span>
-                                <span className="text-xs font-bold text-gray-500 uppercase flex items-center gap-1.5"><CreditCard size={14} className="text-purple-400"/> {o.paymentMethod === 'mercado_pago' ? 'Mercado Pago' : 'Transferencia'}</span>
+                              {/* Info Content (Admin detallado) */}
+                              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 border-t border-gray-100 pt-4 text-left">
+                                <div className="space-y-2">
+                                  <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Información Alumno</p>
+                                  <div className="flex flex-wrap gap-x-6 gap-y-2">
+                                    <span className="text-xs font-bold text-gray-700 uppercase flex items-center gap-1.5"><Star size={14} className="text-purple-400"/> {o.studentName}</span>
+                                    <span className="text-xs font-bold text-gray-700 uppercase flex items-center gap-1.5"><Palette size={14} className="text-purple-400"/> {o.theme}</span>
+                                    {o.school && <span className="text-xs font-bold text-gray-700 uppercase flex items-center gap-1.5"><School size={14} className="text-purple-400"/> {o.school}</span>}
+                                    {o.grade && <span className="text-xs font-bold text-gray-700 uppercase flex items-center gap-1.5"><GraduationCap size={14} className="text-purple-400"/> {o.grade}</span>}
+                                  </div>
+                                </div>
+                                <div className="space-y-2">
+                                  <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Logística & Pago</p>
+                                  <div className="flex flex-wrap gap-x-6 gap-y-2">
+                                    <span className="text-xs font-bold text-gray-700 uppercase flex items-center gap-1.5"><Package size={14} className="text-purple-400"/> {KITS.find(k => k.id === o.selectedKit)?.name || 'Personalizado'}</span>
+                                    <span className="text-xs font-bold text-gray-700 uppercase flex items-center gap-1.5"><MapPin size={14} className="text-purple-400"/> {o.deliveryType === 'envio' ? o.commune : 'Retiro'}</span>
+                                    <span className="text-xs font-bold text-gray-700 uppercase flex items-center gap-1.5"><CreditCard size={14} className="text-purple-400"/> {o.paymentMethod === 'mercado_pago' ? 'Mercado Pago' : 'Transferencia'}</span>
+                                  </div>
+                                </div>
                               </div>
 
-                              {/* Action Buttons (Aceptar envía el link automáticamente) */}
+                              {/* Action Buttons */}
                               <div className="grid grid-cols-1 sm:grid-cols-2 md:flex md:flex-row gap-3 w-full border-t border-gray-100 pt-6">
                                 <a 
                                   href={`https://wa.me/56${o.phone}`} 
