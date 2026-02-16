@@ -19,7 +19,9 @@ import {
   Clock,
   TrendingUp,
   BarChart3,
-  AlertCircle
+  AlertCircle,
+  ThumbsUp,
+  ThumbsDown
 } from 'lucide-react';
 import { initializeApp } from 'firebase/app';
 import { 
@@ -39,7 +41,7 @@ import {
   onAuthStateChanged 
 } from 'firebase/auth';
 
-// --- 1. CONFIGURACIÓN DE FIREBASE (TUS CREDENCIALES) ---
+// --- 1. CONFIGURACIÓN DE FIREBASE ---
 const firebaseConfig = {
   apiKey: "AIzaSyDouxxvj9RWplaFT6WKoDWPoHuSOnF2HEU",
   authDomain: "lelune-pedidos.firebaseapp.com",
@@ -53,11 +55,12 @@ const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
 
-// --- 2. DATOS DE NEGOCIO ---
+// --- 2. DATOS DE NEGOCIO ACTUALIZADOS ---
 const KITS = [
-  { id: 'esencial', name: 'Kit Esencial', price: 25000, desc: 'Identificación básica para útiles y ropa.' },
-  { id: 'plus', name: 'Kit Plus', price: 35000, desc: 'Etiquetas + Termoformados + Llavero de regalo.' },
-  { id: 'deluxe', name: 'Kit Deluxe', price: 50000, desc: 'Papelería completa, identificadores premium y sorpresas.' },
+  { id: 'esencial', name: 'Kit Esencial', price: 13990, desc: 'Identificación básica para útiles y ropa.' },
+  { id: 'plus', name: 'Kit Plus', price: 23990, desc: 'Etiquetas + Termoformados + Llavero de regalo.' },
+  { id: 'deluxe', name: 'Kit Deluxe', price: 34990, desc: 'Papelería completa, identificadores premium y sorpresas.' },
+  { id: 'guaga', name: 'Kit Guaga', price: 21990, desc: 'Especial para las necesidades de los más pequeñitos.' },
   { id: 'ninguno', name: 'Sin Kit (Solo individuales)', price: 0, desc: 'Selecciona solo los productos que necesites abajo.' }
 ];
 
@@ -141,10 +144,16 @@ export default function App() {
   }, [formData.selectedKit, formData.selectedItems]);
 
   const stats = useMemo(() => {
-    const totalRevenue = orders.reduce((acc, curr) => acc + (curr.total || 0), 0);
+    // Solo contar ingresos de pedidos aceptados o completados
+    const totalRevenue = orders
+      .filter(o => o.status !== 'rechazado')
+      .reduce((acc, curr) => acc + (curr.total || 0), 0);
+      
     const kitStats = KITS.map(kit => ({
       name: kit.name,
-      revenue: orders.filter(o => o.selectedKit === kit.id).reduce((acc, curr) => acc + (curr.total || 0), 0)
+      revenue: orders
+        .filter(o => o.selectedKit === kit.id && o.status !== 'rechazado')
+        .reduce((acc, curr) => acc + (curr.total || 0), 0)
     }));
     return { kitStats, totalRevenue };
   }, [orders]);
@@ -185,7 +194,8 @@ export default function App() {
       const addressFull = formData.deliveryType === 'envio' ? `${formData.street} ${formData.houseNumber}, ${formData.commune}` : 'Retiro en Local';
       const msg = `Hola Lelune! 🌙 Nuevo pedido:\n👤 Cliente: ${formData.parentName}\n🎒 Alumno: ${formData.studentName}\n📦 Kit: ${kitName}\n➕ Adicionales: ${itemsList}\n📍 Entrega: ${addressFull}\n💰 Total: $${totalAmount.toLocaleString('es-CL')}`;
       
-      window.open(`https://wa.me/56${formData.phone}?text=${encodeURIComponent(msg)}`, '_blank');
+      // Enviar al número de Lelune: +56950732322
+      window.open(`https://wa.me/56950732322?text=${encodeURIComponent(msg)}`, '_blank');
       
       setStatusMessage({ type: 'success', text: '¡Pedido enviado!' });
       setStep(0);
@@ -209,6 +219,20 @@ export default function App() {
       setStatusMessage({ type: 'error', text: 'Clave incorrecta.' }); 
       setTimeout(() => setStatusMessage(null), 3000);
     }
+  };
+
+  const updateOrderStatus = async (orderId, newStatus) => {
+    try {
+      const orderRef = doc(db, 'orders', orderId);
+      await updateDoc(orderRef, { status: newStatus });
+      
+      // Si se rechaza, preparamos un mensaje cordial
+      if (newStatus === 'rechazado') {
+        const order = orders.find(o => o.id === orderId);
+        const msg = `Hola ${order.parentName}! 🌙 Te escribimos de Lelune. Lamentamos informarte que no hemos podido aceptar tu pedido en este momento. Si tienes dudas, por favor contáctanos por aquí. ¡Muchas gracias!`;
+        window.open(`https://wa.me/56${order.phone}?text=${encodeURIComponent(msg)}`, '_blank');
+      }
+    } catch (e) { console.error(e); }
   };
 
   return (
@@ -481,12 +505,14 @@ export default function App() {
                       {orders.map(o => {
                         const isDeadlineSoon = DELIVERY_DATES.find(d => d.id === o.deliveryDateId)?.isUrgent;
                         return (
-                          <div key={o.id} className={`w-full p-6 sm:p-8 rounded-[2.5rem] border transition-all flex flex-col lg:flex-row gap-6 items-start lg:items-center justify-between ${o.status === 'listo' ? 'bg-green-50/50 border-green-100' : 'bg-white border-gray-100 hover:border-purple-200 shadow-sm'}`}>
+                          <div key={o.id} className={`w-full p-6 sm:p-8 rounded-[2.5rem] border transition-all flex flex-col lg:flex-row gap-6 items-start lg:items-center justify-between ${o.status === 'listo' ? 'bg-green-50/50 border-green-100' : o.status === 'rechazado' ? 'bg-red-50 opacity-60 border-red-100' : 'bg-white border-gray-100 hover:border-purple-200 shadow-sm'}`}>
                             <div className="flex-1 space-y-2">
                               <div className="flex flex-wrap items-center gap-3">
                                 <span className="text-[10px] font-black text-gray-300 uppercase">{o.createdAt?.toDate ? o.createdAt.toDate().toLocaleDateString('es-CL') : 'Reciente'}</span>
-                                {o.status === 'listo' && <span className="bg-green-500 text-white text-[9px] font-black px-2 py-1 rounded-lg uppercase">Listo</span>}
-                                {isDeadlineSoon && o.status !== 'listo' && <span className="bg-red-500 text-white text-[9px] font-black px-2 py-1 rounded-lg uppercase animate-pulse">Urgente</span>}
+                                {o.status === 'listo' && <span className="bg-green-500 text-white text-[9px] font-black px-2 py-1 rounded-lg uppercase">Completado</span>}
+                                {o.status === 'aceptado' && <span className="bg-blue-500 text-white text-[9px] font-black px-2 py-1 rounded-lg uppercase">Aceptado</span>}
+                                {o.status === 'rechazado' && <span className="bg-red-500 text-white text-[9px] font-black px-2 py-1 rounded-lg uppercase">Rechazado</span>}
+                                {isDeadlineSoon && o.status === 'pendiente' && <span className="bg-red-500 text-white text-[9px] font-black px-2 py-1 rounded-lg uppercase animate-pulse">Urgente</span>}
                               </div>
                               <p className="font-black text-gray-800 text-2xl leading-none text-left">{o.parentName}</p>
                               <div className="flex flex-wrap gap-x-6 gap-y-2 pt-2 text-left">
@@ -502,12 +528,29 @@ export default function App() {
                               </div>
                               <div className="flex gap-2 w-full sm:w-auto">
                                 <a href={`https://wa.me/56${o.phone}`} target="_blank" className="flex-1 sm:flex-none p-4 bg-green-500 text-white rounded-2xl flex items-center justify-center gap-2 text-[10px] font-black uppercase tracking-widest shadow-lg shadow-green-100"><Phone size={14}/> WhatsApp</a>
-                                <button onClick={() => {
-                                  const ref = doc(db, 'orders', o.id);
-                                  updateDoc(ref, { status: o.status === 'listo' ? 'pendiente' : 'listo' });
-                                }} className={`flex-1 sm:flex-none p-4 rounded-2xl flex items-center justify-center gap-2 text-[10px] font-black uppercase tracking-widest transition-all ${o.status === 'listo' ? 'bg-gray-100 text-gray-400' : 'bg-purple-500 text-white shadow-lg shadow-purple-100'}`}>
-                                  <CheckCircle2 size={14}/> {o.status === 'listo' ? 'Reabrir' : 'Cerrar'}
-                                </button>
+                                
+                                {o.status === 'pendiente' && (
+                                  <>
+                                    <button onClick={() => updateOrderStatus(o.id, 'aceptado')} className="flex-1 sm:flex-none p-4 bg-blue-500 text-white rounded-2xl flex items-center justify-center gap-2 text-[10px] font-black uppercase tracking-widest shadow-lg shadow-blue-100">
+                                      <ThumbsUp size={14}/> Aceptar
+                                    </button>
+                                    <button onClick={() => updateOrderStatus(o.id, 'rechazado')} className="flex-1 sm:flex-none p-4 bg-red-500 text-white rounded-2xl flex items-center justify-center gap-2 text-[10px] font-black uppercase tracking-widest shadow-lg shadow-red-100">
+                                      <ThumbsDown size={14}/> Rechazar
+                                    </button>
+                                  </>
+                                )}
+
+                                {o.status === 'aceptado' && (
+                                  <button onClick={() => updateOrderStatus(o.id, 'listo')} className="flex-1 sm:flex-none p-4 bg-purple-500 text-white rounded-2xl flex items-center justify-center gap-2 text-[10px] font-black uppercase tracking-widest shadow-lg shadow-purple-100">
+                                    <CheckCircle2 size={14}/> Completar
+                                  </button>
+                                )}
+
+                                {(o.status === 'listo' || o.status === 'rechazado') && (
+                                  <button onClick={() => updateOrderStatus(o.id, 'pendiente')} className="flex-1 sm:flex-none p-4 bg-gray-100 text-gray-400 rounded-2xl flex items-center justify-center gap-2 text-[10px] font-black uppercase tracking-widest">
+                                    Reabrir
+                                  </button>
+                                )}
                               </div>
                             </div>
                           </div>
